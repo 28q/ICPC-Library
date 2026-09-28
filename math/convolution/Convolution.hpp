@@ -3,346 +3,58 @@
 #include "../../other/template.hpp"
 #include "../ModInt.hpp"
 
-constexpr ull primitive_root_for_convolution(ull p) {
-    if (p == 2) return 1;
-    if (p == 998244353) return 3;
-    if (p == 469762049) return 3;
-    if (p == 1811939329) return 11;
-    if (p == 2013265921) return 11;
-    rep (g, 2, p) {
-        if (mod_pow(g, (p - 1) >> 1, p) != 1) return g;
-    }
-    return -1;
-}
+// NTT prime / primitive root
+// 998244353  = 119 * 2^23 + 1, g = 3
+// 469762049  =   7 * 2^26 + 1, g = 3
+// 167772161  =   5 * 2^25 + 1, g = 3
 
-namespace internal {
-
-template<class T> class NthRoot {
-private:
-    static constexpr unsigned int lg =
-        bitop::msb((T::get_mod() - 1) & (1 - T::get_mod()));
-    T root[lg + 1], inv_root[lg + 1];
-    T rate[lg + 1], inv_rate[lg + 1];
-    T rate3[lg + 1], inv_rate3[lg + 1];
-
-public:
-    constexpr NthRoot() : root{}, inv_root{}, rate{}, inv_rate{}, rate3{}, inv_rate3{} {
-        root[lg] = T{primitive_root_for_convolution(T::get_mod())}.pow(
-            (T::get_mod() - 1) >> lg);
-        inv_root[lg] = root[lg].inv();
-        rrep (i, lg) {
-            root[i] = root[i + 1] * root[i + 1];
-            inv_root[i] = inv_root[i + 1] * inv_root[i + 1];
-        }
-        T r = 1, ir = 1;
-        rep (i, 2, lg + 1) {
-            rate[i - 2] = r * root[i];
-            inv_rate[i - 2] = ir * inv_root[i];
-            r *= inv_root[i];
-            ir *= root[i];
-        }
-        r = ir = 1;
-        rep (i, 3, lg + 1) {
-            rate3[i - 3] = r * root[i];
-            inv_rate3[i - 3] = ir * inv_root[i];
-            r *= inv_root[i];
-            ir *= root[i];
-        }
-    }
-    static constexpr unsigned int get_lg() { return lg; }
-    constexpr T get(int n) const { return root[n]; }
-    constexpr T inv(int n) const { return inv_root[n]; }
-    constexpr T get_rate(int n) const { return rate[n]; }
-    constexpr T get_inv_rate(int n) const { return inv_rate[n]; }
-    constexpr T get_rate3(int n) const { return rate3[n]; }
-    constexpr T get_inv_rate3(int n) const { return inv_rate3[n]; }
-};
-
-template<class T> void number_theoretic_transform(std::vector<T>& a) {
-    static constexpr NthRoot<T> nth_root;
-    static constexpr ull MOD = T::get_mod();
-    static constexpr ull MOD2 = MOD * MOD;
+void ntt(vector<mint>& a, bool inv) {
     int n = a.size();
-    for (int i = n >> 1; i > 0; i >>= 1) {
-        if (i == 1) {
-            T z = T::raw(1);
-            rep (j, 0, n, i << 1) {
-                rep (k, i) {
-                    const T x = a[j + k];
-                    const T y = a[j + i + k] * z;
-                    a[j + k] = x + y;
-                    a[j + i + k] = x - y;
-                }
-                z *= nth_root.get_rate(popcnt(j & ~(j + (i << 1))));
-            }
-        }
-        else {
-            i >>= 1;
-            T z = 1, y = nth_root.get(2);
-            rep (j, 0, n, i << 2) {
-                T z2 = z * z, z3 = z2 * z;
-                rep (k, i) {
-                    ull a0 = a[j + k].get();
-                    ull a1 = a[j + k + i].get() * (ull)z.get();
-                    ull a2 = a[j + k + i * 2].get() * (ull)z2.get();
-                    ull a3 = a[j + k + i * 3].get() * (ull)z3.get();
-                    ull tmp = T(a1 + MOD2 - a3).get() * (ull)y.get();
-                    a[j + k] = a0 + a2 + a1 + a3;
-                    a[j + k + i] = a0 + a2 + MOD2 * 2 - a1 - a3;
-                    a[j + k + i * 2] = a0 + MOD2 - a2 + tmp;
-                    a[j + k + i * 3] = a0 + MOD2 * 2 - a2 - tmp;
-                }
-                z *= nth_root.get_rate3(popcnt(j & ~(j + (i << 2))));
+
+    for (int i = 1, j = 0; i < n; ++i) {
+        int bit = n >> 1;
+        while (j & bit) j ^= bit, bit >>= 1;
+        j ^= bit;
+        if (i < j) swap(a[i], a[j]);
+    }
+
+    for (int len = 2; len <= n; len <<= 1) {
+        mint z = mint(3).pow((998244353 - 1) / len);
+        if (inv) z = z.inv();
+
+        for (int i = 0; i < n; i += len) {
+            mint w = 1;
+            rep(j, len / 2) {
+                mint x = a[i + j];
+                mint y = a[i + j + len / 2] * w;
+                a[i + j] = x + y;
+                a[i + j + len / 2] = x - y;
+                w *= z;
             }
         }
     }
-}
 
-template<class T> void inverse_number_theoretic_transform(std::vector<T>& a) {
-    static constexpr NthRoot<T> nth_root;
-    static constexpr ull MOD = T::get_mod();
-    int n = a.size();
-    for (int i = 1; i < n; i <<= 1) {
-        if (i == n / 2) {
-            T z = T::raw(1);
-            rep (j, 0, n, i << 1) {
-                rep (k, i) {
-                    const T x = a[j + k];
-                    const T y = a[j + i + k];
-                    a[j + k] = x + y;
-                    a[j + i + k] = (x - y) * z;
-                }
-                z *= nth_root.get_inv_rate(popcnt(j & ~(j + (i << 1))));
-            }
-        }
-        else {
-            T z = 1, y = nth_root.inv(2);
-            rep (j, 0, n, i << 2) {
-                T z2 = z * z, z3 = z2 * z;
-                rep (k, i) {
-                    ull a0 = a[j + k].get();
-                    ull a1 = a[j + k + i].get();
-                    ull a2 = a[j + k + i * 2].get();
-                    ull a3 = a[j + k + i * 3].get();
-                    ull tmp = (a2 + MOD - a3) * (ull)y.get() % MOD;
-                    a[j + k] = a0 + a2 + a1 + a3;
-                    a[j + k + i] = (a0 + MOD - a1 + tmp) * (ull)z.get();
-                    a[j + k + i * 2] = (a0 + a1 + 2 * MOD - a2 - a3) * (ull)z2.get();
-                    a[j + k + i * 3] = (a0 + 2 * MOD - a1 - tmp) * (ull)z3.get();
-                }
-                z *= nth_root.get_inv_rate3(popcnt(j & ~(j + (i << 2))));
-            }
-            i <<= 1;
-        }
+    if (inv) {
+        mint in = mint(n).inv();
+        for (auto& x : a) x *= in;
     }
-    T inv_n = T(1) / n;
-    for (auto&& x : a) x *= inv_n;
 }
 
-template<class T>
-std::vector<T> convolution_naive(const std::vector<T>& a,
-                                 const std::vector<T>& b) {
-    int n = a.size(), m = b.size();
-    std::vector<T> c(n + m - 1);
-    rep (i, n)
-        rep (j, m) c[i + j] += a[i] * b[j];
-    return c;
-}
+vector<mint> convolution(vector<mint> a, vector<mint> b) {
+    if (a.empty() || b.empty()) return {};
 
-template<class T> std::vector<T> convolution_pow2(std::vector<T> a) {
-    int n = a.size() * 2 - 1;
-    int lg = bitop::msb(n - 1) + 1;
-    if (n - (1 << (lg - 1)) <= 5) {
-        --lg;
-        int m = a.size() - (1 << (lg - 1));
-        std::vector<T> a1(a.begin(), a.begin() + m), a2(a.begin() + m, a.end());
-        std::vector<T> c(n);
-        std::vector<T> c1 = convolution_naive(a1, a1);
-        std::vector<T> c2 = convolution_naive(a1, a2);
-        std::vector<T> c3 = convolution_pow2(a2);
-        rep (i, c1.size()) c[i] += c1[i];
-        rep (i, c2.size()) c[i + m] += c2[i] * 2;
-        rep (i, c3.size()) c[i + m * 2] += c3[i];
-        return c;
-    }
-    int m = 1 << lg;
-    a.resize(m);
-    number_theoretic_transform(a);
-    rep (i, m) a[i] *= a[i];
-    inverse_number_theoretic_transform(a);
+    int sz = a.size() + b.size() - 1;
+    int n = 1;
+    while (n < sz) n <<= 1;
+
     a.resize(n);
+    b.resize(n);
+
+    ntt(a, false);
+    ntt(b, false);
+    rep(i, n) a[i] *= b[i];
+    ntt(a, true);
+
+    a.resize(sz);
     return a;
 }
-
-template<class T>
-std::vector<T> convolution(std::vector<T> a, std::vector<T> b) {
-    int n = a.size() + b.size() - 1;
-    int lg = bitop::ceil_log2(n);
-    int m = 1 << lg;
-    if (n - (1 << (lg - 1)) <= 5) {
-        --lg;
-        if (a.size() < b.size()) std::swap(a, b);
-        int m = n - (1 << lg);
-        std::vector<T> a1(a.begin(), a.begin() + m), a2(a.begin() + m, a.end());
-        std::vector<T> c(n);
-        std::vector<T> c1 = convolution_naive(a1, b);
-        std::vector<T> c2 = convolution(a2, b);
-        rep (i, c1.size()) c[i] += c1[i];
-        rep (i, c2.size()) c[i + m] += c2[i];
-        return c;
-    }
-    a.resize(m);
-    b.resize(m);
-    number_theoretic_transform(a);
-    number_theoretic_transform(b);
-    rep (i, m) a[i] *= b[i];
-    inverse_number_theoretic_transform(a);
-    a.resize(n);
-    return a;
-}
-
-} // namespace internal
-
-using internal::inverse_number_theoretic_transform;
-using internal::number_theoretic_transform;
-
-template<class T>
-std::vector<T>
-convolution_for_any_mod(const std::vector<T>& a,
-                        const std::vector<T>& b);
-
-template<unsigned int p>
-std::vector<static_modint<p>>
-convolution(const std::vector<static_modint<p>>& a,
-            const std::vector<static_modint<p>>& b) {
-    unsigned int n = a.size(), m = b.size();
-    if (n == 0 || m == 0) return {};
-    if (n <= 60 || m <= 60) return internal::convolution_naive(a, b);
-    if (n + m - 1 <= ((1 - p) & (p - 1))) {
-        if (n == m && a == b) return internal::convolution_pow2(a);
-        return internal::convolution(a, b);
-    }
-    return convolution_for_any_mod(a, b);
-}
-
-template<unsigned int p>
-std::vector<ll> convolution(const std::vector<ll>& a,
-                            const std::vector<ll>& b) {
-    int n = a.size(), m = b.size();
-    std::vector<static_modint<p>> a2(n), b2(m);
-    rep (i, n) a2[i] = a[i];
-    rep (i, m) b2[i] = b[i];
-    auto c2 = convolution(a2, b2);
-    std::vector<ll> c(c2.size());
-    rep (i, c2.size()) c[i] = c2[i].get();
-    return c;
-}
-
-template<class T>
-std::vector<T>
-convolution_for_any_mod(const std::vector<T>& a,
-                        const std::vector<T>& b) {
-    int n = a.size(), m = b.size();
-    assert(n + m - 1 <= (1 << 26));
-    if (n == 0 || m == 0) return {};
-    std::vector<ll> a2(n), b2(m);
-    rep (i, n) a2[i] = a[i].get();
-    rep (i, m) b2[i] = b[i].get();
-    static constexpr ll MOD1 = 469762049;
-    static constexpr ll MOD2 = 1811939329;
-    static constexpr ll MOD3 = 2013265921;
-    static constexpr ll INV1_2 = mod_pow(MOD1, MOD2 - 2, MOD2);
-    static constexpr ll INV1_3 = mod_pow(MOD1, MOD3 - 2, MOD3);
-    static constexpr ll INV2_3 = mod_pow(MOD2, MOD3 - 2, MOD3);
-    auto c1 = convolution<MOD1>(a2, b2);
-    auto c2 = convolution<MOD2>(a2, b2);
-    auto c3 = convolution<MOD3>(a2, b2);
-    std::vector<T> res(n + m - 1);
-    rep (i, n + m - 1) {
-        ll t1 = c1[i];
-        ll t2 = (c2[i] - t1 + MOD2) * INV1_2 % MOD2;
-        if (t2 < 0) t2 += MOD2;
-        ll t3 =
-            ((c3[i] - t1 + MOD3) * INV1_3 % MOD3 - t2 + MOD3) * INV2_3 % MOD3;
-        if (t3 < 0) t3 += MOD3;
-        res[i] = (t1 + T(t2 + t3 * MOD2) * MOD1);
-    }
-    return res;
-}
-
-template<int id>
-std::vector<dynamic_modint<id>>
-convolution(const std::vector<dynamic_modint<id>>& a,
-            const std::vector<dynamic_modint<id>>& b) {
-    return convolution_for_any_mod(a, b);
-}
-
-std::vector<ll> convolution_ll(const std::vector<ll>& a, const std::vector<ll>& b) {
-    int n = a.size(), m = b.size();
-    assert(n + m - 1 <= (1 << 26));
-    if (n == 0 || m == 0) return {};
-    static constexpr ll MOD1 = 469762049;
-    static constexpr ll MOD2 = 1811939329;
-    static constexpr ll MOD3 = 2013265921;
-    static constexpr ll INV1_2 = mod_pow(MOD1, MOD2 - 2, MOD2);
-    static constexpr ll INV1_3 = mod_pow(MOD1, MOD3 - 2, MOD3);
-    static constexpr ll INV2_3 = mod_pow(MOD2, MOD3 - 2, MOD3);
-    auto c1 = convolution<MOD1>(a, b);
-    auto c2 = convolution<MOD2>(a, b);
-    auto c3 = convolution<MOD3>(a, b);
-    std::vector<ll> res(n + m - 1);
-    rep (i, n + m - 1) {
-        ll t1 = c1[i];
-        ll t2 = (c2[i] - t1 + MOD2) * INV1_2 % MOD2;
-        if (t2 < 0) t2 += MOD2;
-        ll t3 =
-            ((c3[i] - t1 + MOD3) * INV1_3 % MOD3 - t2 + MOD3) * INV2_3 % MOD3;
-        if (t3 < 0) t3 += MOD3;
-        res[i] = t1 + (t2 + t3 * MOD2) * MOD1;
-    }
-    return res;
-}
-
-template<class T> void ntt_doubling_(std::vector<T>& a, std::vector<T> b) {
-    static constexpr internal::NthRoot<T> nth_root;
-    int n = a.size();
-    const T z = nth_root.get(bitop::msb(n) + 1);
-    T r = 1;
-    rep (i, n) {
-        b[i] *= r;
-        r *= z;
-    }
-    number_theoretic_transform(b);
-    a.reserve(2 * n);
-    a.insert(a.end(), all(b));
-}
-
-template<class T> void ntt_doubling_(std::vector<T>& a) {
-    static constexpr internal::NthRoot<T> nth_root;
-    int n = a.size();
-    auto b = a;
-    inverse_number_theoretic_transform(b);
-    const T z = nth_root.get(bitop::msb(n) + 1);
-    T r = 1;
-    rep (i, n) {
-        b[i] *= r;
-        r *= z;
-    }
-    number_theoretic_transform(b);
-    a.reserve(2 * n);
-    a.insert(a.end(), all(b));
-}
-
-template<unsigned int p> 
-using is_ntt_friendly = std::integral_constant<bool, (1 << 23) <= ((1 - p) & (p - 1))>;
-
-template<class T>
-struct is_ntt_friendly_modint : std::false_type {};
-
-template<unsigned int p>
-struct is_ntt_friendly_modint<static_modint<p>> : is_ntt_friendly<p> {};
-
-/**
- * @brief Convolution(畳み込み)
- * @docs docs/math/convolution/Convolution.md
- */
