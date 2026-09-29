@@ -3,71 +3,54 @@
 #include "../other/template.hpp"
 #include "ModInt.hpp"
 
-template<class T> class Combinatorics {
-private:
-    static std::vector<T> factorial;
-    static std::vector<T> factinv;
+template<class T>
+struct Combinatorics {
+    inline static vector<T> fac{1}, ifac{1};
 
-public:
-    static void init(ll n) {
-        const int b = factorial.size();
-        if (n < b) return;
-        factorial.resize(n + 1);
-        rep (i, b, n + 1) factorial[i] = factorial[i - 1] * i;
-        factinv.resize(n + 1);
-        factinv[n] = T(1) / factorial[n];
-        rreps (i, b, n) factinv[i - 1] = factinv[i] * i;
+    static void init(int n) {
+        int m = fac.size();
+        if (n < m) return;
+
+        fac.resize(n + 1);
+        rep2(i, m, n + 1) fac[i] = fac[i - 1] * i;
+
+        ifac.resize(n + 1);
+        ifac[n] = fac[n].inv();
+        for (int i = n; i >= m; --i) ifac[i - 1] = ifac[i] * i;
     }
-    static T fact(ll x) {
-        if (x < 0) return 0;
-        init(x);
-        return factorial[x];
-    }
-    static T finv(ll x) {
-        if (x < 0) return 0;
-        init(x);
-        return factinv[x];
-    }
-    static T inv(ll x) {
-        if (x <= 0) return 0;
-        init(x);
-        return factorial[x - 1] * factinv[x];
-    }
-    static T perm(ll n, ll r) {
-        if (r < 0 || r > n) return 0;
-        init(n);
-        return factorial[n] * factinv[n - r];
-    }
-    static T comb(ll n, ll r) {
+
+    static T fact(int n) {
         if (n < 0) return 0;
+        init(n);
+        return fac[n];
+    }
+
+    static T finv(int n) {
+        if (n < 0) return 0;
+        init(n);
+        return ifac[n];
+    }
+
+    static T inv(int n) {
+        if (n <= 0) return 0;
+        init(n);
+        return fac[n - 1] * ifac[n];
+    }
+
+    static T perm(int n, int r) {
         if (r < 0 || r > n) return 0;
         init(n);
-        return factorial[n] * factinv[n - r] * factinv[r];
+        return fac[n] * ifac[n - r];
     }
-    static T homo(ll n, ll r) { return comb(n + r - 1, r); }
-    static T small_perm(ll n, ll r) {
+
+    static T comb(int n, int r) {
         if (r < 0 || r > n) return 0;
-        T res = 1;
-        reps (i, r) res *= n - r + i;
-        return res;
+        init(n);
+        return fac[n] * ifac[r] * ifac[n - r];
     }
-    static T small_comb(ll n, ll r) {
-        if (r < 0 || r > n) return 0;
-        chmin(r, n - r);
-        init(r);
-        T res = factinv[r];
-        reps (i, r) res *= n - r + i;
-        return res;
+
+    static T homo(int n, int r) {
+        if (n == 0) return r == 0;
+        return comb(n + r - 1, r);
     }
-    static T small_homo(ll n, ll r) { return small_comb(n + r - 1, r); }
 };
-
-template<class T>
-std::vector<T> Combinatorics<T>::factorial = std::vector<T>(1, 1);
-template<class T>
-std::vector<T> Combinatorics<T>::factinv = std::vector<T>(1, 1);
-
-/**
- * @brief Combinatorics
- * @docs docs/math/Combinatorics.md
- */
