@@ -3,7 +3,6 @@
 #include "../../../math/ModInt.hpp"
 #include "../../../math/convolution/Convolution.hpp"
 using namespace std;
-using mint = modint998244353;
 int main() {
     int n, m; cin >> n >> m;
     vector<mint> a(n), b(m);
