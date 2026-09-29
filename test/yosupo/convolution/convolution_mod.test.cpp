@@ -5,7 +5,10 @@
 using namespace std;
 using mint = modint998244353;
 int main() {
-    int n, m; scan >> n >> m;
-    vector<mint> a(n), b(m); scan >> a >> b;
-    prints(convolution(a, b));
+    int n, m; cin >> n >> m;
+    vector<mint> a(n), b(m);
+    rep(i, n) cin >> a[i];
+    rep(i, m) cin >> b[i];
+    vector<mint> c = convolution(a, b);
+    rep(i, n + m - 1) cout << c[i] << " \n"[i == n + m - 2];
 }
